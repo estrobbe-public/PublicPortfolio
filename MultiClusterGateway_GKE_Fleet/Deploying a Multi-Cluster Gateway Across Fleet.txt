@@ -1,0 +1,611 @@
+Deploying a Multi-Cluster Gateway Across GKE Clusters
+https://www.skills.google/paths/12/course_templates/1501/labs/599023
+
+Overview
+Multi-cluster Gateways (MCG) make managing application networking across many clusters and teams easy and secure, which is useful in terms of scalability. GatewayClasses defines a cluster-scoped resource that's a template for creating load balancers in a cluster. In GKE, the gke-l7-gxlb-mc and gke-l7-rilb-mc GatewayClasses deploy multi-cluster Gateways that provide HTTP routing, traffic splitting, traffic mirroring, health-based failover, and more across different GKE clusters, Kubernetes Namespaces, and regions.
+
+Multi-cluster Services (MCS) is an API standard for Services that span clusters. Its GKE controller also provides service-discovery across GKE clusters. The multi-cluster Gateway controller uses MCS API resources to group Pods into a Service that is addressable across or spans multiple clusters.
+
+In this lab, you learn how to enable, use and deploy the multi-cluster Google Kubernetes Engine (GKE) Gateway controller. This Google-hosted controller provisions external and internal load balancers, which balance traffic across multiple Kubernetes clusters.
+
+Diagram depicting the roles for Gateway and HttpRoute
+
+Objectives
+In this lab, you learn how to perform the following tasks:
+
+Create and Register GKE clusters to the fleet.
+Enable and configure multi-cluster Services (MCS).
+Enable and configure Multi-cluster Gateways (MCG).
+Deploy a distributed application and balance traffic across clusters.
+
+
+Task 1. Create a Fleet
+Enable APIs
+In this task, begin by enabling the required APIs:
+
+In the Cloud console, click the Cloud Shell icon Cloud Shell icon in the upper-right corner.
+
+Enable the required APIs:
+
+gcloud services enable anthos.googleapis.com 
+
+Create Fleet
+Next, create a fleet. gcloud container fleet ingress describe --project=qwiklabs-gcp-00-56f281ca967c
+
+In the Google Cloud console, select the Navigation Menu (Navigation menu) > Kubernetes Engine > Overview.
+
+Click the Fleet Dashboard button.
+
+Click the Create a Fleet button.
+
+Click Edit Fleet Name or Cluster List.
+
+On the Fleet registration page, enter my-gke-fleet in the Fleet name field. The fleet name cannot be changed after initial creation.
+
+Click Save to save the Fleet name.
+
+Click Confirm to create GKE Fleet.
+
+Note: As an alternative to the console-based method, you can enable GKE Fleets by enabling the Anthos API using gcloud and create an empty fleet using the following command:
+gcloud container fleet create --display-name=my-gke-fleet
+Click Close to complete the operation.
+
+
+Task 2. Deploy clusters
+In this task, you deploy three GKE clusters across two different regions in your project. All clusters are registered to the same fleet, allowing multi-cluster Gateways and Services to operate across them. Deploy three GKE clusters into us-west1 and us-east4.
+
+GKE clusters architecture diagram, depicting the different regions within the project
+
+In Cloud Shell, create two GKE clusters in us-west1 named cluster1 and cluster2 with the --async flag to avoid waiting for the other clusters to provision:
+gcloud container clusters create cluster1 \
+  --zone=us-west1-b \
+  --enable-ip-alias \
+  --machine-type=e2-standard-4 \
+  --num-nodes=1 \
+  --workload-pool=qwiklabs-gcp-01-2e74891f7230.svc.id.goog \
+  --release-channel=regular \
+  --project=qwiklabs-gcp-01-2e74891f7230 --async
+
+gcloud container clusters create cluster2 \
+  --zone=us-west1-b \
+  --enable-ip-alias \
+  --machine-type=e2-standard-4 \
+  --num-nodes=1 \
+  --workload-pool=qwiklabs-gcp-01-2e74891f7230.svc.id.goog \
+  --release-channel=regular \
+  --project=qwiklabs-gcp-01-2e74891f7230 --async
+
+Create a GKE cluster in us-east4 named cluster3:
+gcloud container clusters create cluster3 \
+  --zone=us-east4-c \
+  --enable-ip-alias \
+  --machine-type=e2-standard-4 \
+  --num-nodes=1 \
+  --workload-pool=qwiklabs-gcp-01-2e74891f7230.svc.id.goog \
+  --release-channel=regular \
+  --project=qwiklabs-gcp-01-2e74891f7230
+
+Note: It can take up to eight minutes to provision the GKE clusters.
+Ensure all clusters are running:
+gcloud container clusters list
+
+Configure cluster credentials
+Next, configure cluster credentials with memorable names. This makes it easier to switch between clusters when deploying resources across several clusters.
+
+Fetch the credentials for cluster1, cluster2, and cluster3:
+gcloud container clusters get-credentials cluster1 --zone=us-west1-b --project=qwiklabs-gcp-01-2e74891f7230
+
+gcloud container clusters get-credentials cluster2 --zone=us-west1-b --project=qwiklabs-gcp-01-2e74891f7230
+
+gcloud container clusters get-credentials cluster3 --zone=us-east4-c  --project=qwiklabs-gcp-01-2e74891f7230
+
+This stores the credentials locally so that you can use your kubectl client to access the cluster API servers. By default, an auto-generated name is created for the credential.
+
+Rename the cluster contexts so they are easier to reference later:
+kubectl config rename-context gke_qwiklabs-gcp-01-2e74891f7230_us-west1-b_cluster1 cluster1
+
+kubectl config rename-context gke_qwiklabs-gcp-01-2e74891f7230_us-west1-b_cluster2 cluster2
+
+kubectl config rename-context gke_qwiklabs-gcp-01-2e74891f7230_us-east4-c_cluster3 cluster3
+
+Enable the multi-cluster Gateway API on the cluster1 cluster:
+gcloud container clusters update cluster1  --gateway-api=standard --region=us-west1-b
+
+Note: It can take up to five minutes to enable the multi-cluster Gateway API.
+
+Task 3. Register clusters to the fleet
+Now it's time to register these clusters.
+
+Register the clusters to a fleet:
+gcloud container fleet memberships register cluster1 \
+  --gke-cluster us-west1-b/cluster1 \
+  --enable-workload-identity \
+  --project=qwiklabs-gcp-01-2e74891f7230
+
+gcloud container fleet memberships register cluster2 \
+    --gke-cluster us-west1-b/cluster2 \
+    --enable-workload-identity \
+    --project=qwiklabs-gcp-01-2e74891f7230
+
+gcloud container fleet memberships register cluster3 \
+    --gke-cluster us-east4-c/cluster3 \
+    --enable-workload-identity \
+    --project=qwiklabs-gcp-01-2e74891f7230
+
+Confirm that the clusters have been successfully registered with a fleet:
+gcloud container fleet memberships list --project=qwiklabs-gcp-01-2e74891f7230
+
+The output should resemble the following:
+
+NAME: cluster3
+UNIQUE_ID: fe623d20-27bf-463c-bba3-5ff7288411e5
+LOCATION: us-east4
+
+NAME: cluster2
+UNIQUE_ID: 32cfac32-f624-41f9-bf2f-399b6c0cbbe3
+LOCATION: us-west1
+
+NAME: cluster1
+UNIQUE_ID: 3aaa25a8-1e1a-4ee7-a4bf-dfeffadcb770
+LOCATION: us-west1
+
+
+Task 4. Enable multi-cluster Services (MCS)
+In this task, you enable MCS in your fleet for the registered clusters. The MCS controller listens for import/export Services, so that Kubernetes Services are routable across clusters, and traffic can be distributed across them.
+
+MCS Controller architecture diagram.
+
+Enable multi-cluster Services in your fleet for the registered clusters:
+gcloud container fleet multi-cluster-services enable \
+--project qwiklabs-gcp-01-2e74891f7230
+
+This enables the MCS controller for the three clusters that are registered to your fleet, so that it can start listening to and exporting Services.
+
+Grant the required Identity and Access Management (IAM) permissions required for MCS:
+ gcloud projects add-iam-policy-binding qwiklabs-gcp-01-2e74891f7230 \
+ --member "serviceAccount:qwiklabs-gcp-01-2e74891f7230.svc.id.goog[gke-mcs/gke-mcs-importer]" \
+ --role "roles/compute.networkViewer" \
+ --project=qwiklabs-gcp-01-2e74891f7230
+
+Confirm that MCS is enabled for the registered clusters:
+gcloud container fleet multi-cluster-services describe --project=qwiklabs-gcp-01-2e74891f7230
+
+You should see the memberships for the three registered clusters.
+
+Note: It can take up to five minutes for all of the clusters to show. Wait and retry until you see a similar output.
+The output is similar to the following:
+
+createTime: '2024-04-08T10:42:08.727374460Z'
+membershipStates:
+  projects/652767849412/locations/us-east4/memberships/cluster3:
+    state:
+      code: OK
+      description: Firewall successfully updated
+      updateTime: '2024-04-08T10:45:05.098464061Z'
+  projects/652767849412/locations/us-west1/memberships/cluster1:
+    state:
+      code: OK
+      description: Firewall successfully updated
+      updateTime: '2024-04-08T10:45:07.883462984Z'
+  projects/652767849412/locations/us-west1/memberships/cluster2:
+    state:
+      code: OK
+      description: Firewall successfully updated
+      updateTime: '2024-04-08T10:45:06.552764591Z'
+name: projects/qwiklabs-gcp-03-dafc3e3432a4/locations/global/features/multiclusterservicediscovery
+resourceState:
+  state: ACTIVE
+spec: {}
+updateTime: '2024-04-08T10:45:09.012060855Z'
+
+
+
+Task 5. Enable the multi-cluster Gateways (MCG) controller
+Before using Gateway resources in GKE, you must enable the multi-cluster Gateway (MCG) controller. The config cluster is the GKE cluster in which your Gateway and Route resources are deployed. It is a central place that controls routing across your clusters. You will use cluster1 as your config cluster.
+
+Config cluster and MCG Controller architecture diagram
+
+Enable the multi-cluster Gateway controller for the cluster1 cluster:
+gcloud container fleet ingress enable \
+  --config-membership=cluster1 \
+  --project=qwiklabs-gcp-01-2e74891f7230 \
+  --location=us-west1
+
+Confirm that the global Gateway controller is enabled for the registered clusters:
+gcloud container fleet ingress describe --project=qwiklabs-gcp-01-2e74891f7230
+
+Your output should look similar to the following:
+
+createTime: '2024-04-08T10:48:48.932255711Z'
+membershipStates:
+  projects/652767849412/locations/us-east4/memberships/cluster3:
+    state:
+      code: OK
+      updateTime: '2024-04-08T10:49:54.240369901Z'
+  projects/652767849412/locations/us-west1/memberships/cluster1:
+    state:
+      code: OK
+      updateTime: '2024-04-08T10:49:54.240369031Z'
+  projects/652767849412/locations/us-west1/memberships/cluster2:
+    state:
+      code: OK
+      updateTime: '2024-04-08T10:49:54.240370591Z'
+name: projects/qwiklabs-gcp-03-dafc3e3432a4/locations/global/features/multiclusteringress
+resourceState:
+  state: ACTIVE
+spec:
+  multiclusteringress:
+    configMembership: projects/qwiklabs-gcp-03-dafc3e3432a4/locations/us-west1/memberships/cluster1
+state:
+  state:
+    code: OK
+    description: Ready to use
+    updateTime: '2024-04-08T10:49:54.040880431Z'
+updateTime: '2024-04-08T10:50:08.051148347Z'
+Grant Identity and Access Management (IAM) permissions required by the Gateway controller:
+gcloud projects add-iam-policy-binding qwiklabs-gcp-01-2e74891f7230 \
+  --member "serviceAccount:service-268855880648@gcp-sa-multiclusteringress.iam.gserviceaccount.com" \
+  --role "roles/container.admin" \
+  --project=qwiklabs-gcp-01-2e74891f7230
+
+List the GatewayClasses:
+kubectl get gatewayclasses --context=cluster1
+
+Your output should look similar to the following:
+
+NAME                                  CONTROLLER                  ACCEPTED   AGE
+gke-l7-global-external-managed        networking.gke.io/gateway   True       23m
+gke-l7-global-external-managed-mc     networking.gke.io/gateway   True       74s
+gke-l7-gxlb                           networking.gke.io/gateway   True       23m
+gke-l7-gxlb-mc                        networking.gke.io/gateway   True       75s
+gke-l7-regional-external-managed      networking.gke.io/gateway   True       23m
+gke-l7-regional-external-managed-mc   networking.gke.io/gateway   True       74s
+gke-l7-rilb                           networking.gke.io/gateway   True       23m
+gke-l7-rilb-mc                        networking.gke.io/gateway   True       75s
+
+
+Task 6. Deploy the demo application
+Now that the MCG controller is enabled, deploy the application.
+
+Create the store deployment and namespace in cluster3 and cluster2:
+cat <<EOF > store-deployment.yaml
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: store
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: store
+  namespace: store
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: store
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: store
+        version: v1
+    spec:
+      containers:
+      - name: whereami
+        image: gcr.io/google-samples/whereami:v1.2.1
+        ports:
+          - containerPort: 8080
+EOF
+kubectl apply -f store-deployment.yaml --context=cluster2
+kubectl apply -f store-deployment.yaml --context=cluster3
+
+
+The config cluster cluster1 can also host workloads. However, in this lab, you only run the Gateway controllers and configuration on it.
+
+Create the Service and ServiceExports for the cluster2 cluster:
+cat <<EOF > store-west-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: store
+  namespace: store
+spec:
+  selector:
+    app: store
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+kind: ServiceExport
+apiVersion: net.gke.io/v1
+metadata:
+  name: store
+  namespace: store
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: store-west-2
+  namespace: store
+spec:
+  selector:
+    app: store
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+kind: ServiceExport
+apiVersion: net.gke.io/v1
+metadata:
+  name: store-west-2
+  namespace: store
+EOF
+kubectl apply -f store-west-service.yaml --context=cluster2
+
+
+
+Create the Service and ServiceExports for the cluster3 cluster:
+cat <<EOF > store-east-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: store
+  namespace: store
+spec:
+  selector:
+    app: store
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+kind: ServiceExport
+apiVersion: net.gke.io/v1
+metadata:
+  name: store
+  namespace: store
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: store-east-1
+  namespace: store
+spec:
+  selector:
+    app: store
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+kind: ServiceExport
+apiVersion: net.gke.io/v1
+metadata:
+  name: store-east-1
+  namespace: store
+EOF
+kubectl apply -f store-east-service.yaml --context=cluster3
+Copied!
+Ensure that the ServiceExports have been successfully created:
+kubectl get serviceexports --context cluster2 --namespace store
+kubectl get serviceexports --context cluster3 --namespace store
+
+
+Your output should look similar to the following:
+
+# cluster2 cluster
+NAME           AGE
+store          2m40s
+store-west-2   2m40s
+
+# cluster3 cluster
+NAME           AGE
+store          2m25s
+store-east-1   2m25s
+This demonstrates that the store Service contains store Pods across both clusters while the store-west-2 and store-east-1 Services only contain store Pods on their respective clusters. These overlapping Services are used to target the Pods across multiple clusters or a subset of Pods on a single cluster.
+
+
+Task 7. Deploy the Gateway and HttpRoute
+Platform administrators manage and deploy Gateways to centralize security policies such as TLS, a security protocol that provides privacy and data integrity for internet communications.
+
+Service Owners in different teams deploy HttpRoutes in their own namespace so that they can independently control their routing logic.
+
+Once the applications have been deployed, you can configure a Gateway using the Gateway. This Gateway creates an external Application Load Balancer configured to distribute traffic across your target clusters.
+
+Gateway and HttpRoute are resources deployed in the config cluster, which, in this case, is the cluster1 cluster. HTTPRoute, specifically, is a Gateway API type for specifying routing behavior of HTTP requests from a Gateway listener to an API object.
+
+Deploy the Gateway in the cluster1 config cluster:
+cat <<EOF > external-http-gateway.yaml
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: store
+---
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1beta1
+metadata:
+  name: external-http
+  namespace: store
+spec:
+  gatewayClassName: gke-l7-gxlb-mc
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      kinds:
+      - kind: HTTPRoute
+EOF
+kubectl apply -f external-http-gateway.yaml --context=cluster1
+
+Deploy the HTTPRoute in the cluster1 config cluster:
+cat <<EOF > public-store-route.yaml
+kind: HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1beta1
+metadata:
+  name: public-store-route
+  namespace: store
+  labels:
+    gateway: external-http
+spec:
+  parentRefs:
+  - name: external-http
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /west
+    backendRefs:
+    - group: net.gke.io
+      kind: ServiceImport
+      name: store-west-2
+      port: 8080
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /east
+    backendRefs:
+    - group: net.gke.io
+      kind: ServiceImport
+      name: store-east-1
+      port: 8080
+  - backendRefs:
+    - group: net.gke.io
+      kind: ServiceImport
+      name: store
+      port: 8080
+EOF
+kubectl apply -f public-store-route.yaml --context=cluster1
+
+Notice that the default requests are being sent to the closest backend defined by the default rule. In case the path /west is in the request, the request is routed to the service in cluster2. If the request's path matches /east, the request is routed to the cluster3 cluster.
+
+Routing architecture diagram depicting the requests being rerouted.
+
+View the status of the Gateway you just created in cluster1:
+kubectl describe gateway external-http --context cluster1 --namespace store
+
+Status:
+  Addresses:
+    Type:   IPAddress
+    Value:  35.190.90.199
+  Conditions:
+    Last Transition Time:  2024-04-08T11:11:44Z
+    Message:               The OSS Gateway API has deprecated this condition, do not depend on it.
+    Observed Generation:   1
+    Reason:                Scheduled
+    Status:                True
+    Type:                  Scheduled
+    Last Transition Time:  2024-04-08T11:11:44Z
+    Message:               
+    Observed Generation:   1
+    Reason:                Accepted
+    Status:                True
+    Type:                  Accepted
+    Last Transition Time:  2024-04-08T11:11:44Z
+    Message:               
+    Observed Generation:   1
+    Reason:                Programmed
+    Status:                True
+    Type:                  Programmed
+    Last Transition Time:  2024-04-08T11:11:44Z
+    Message:               The OSS Gateway API has altered the "Ready" condition semantics and reserved it for future use.  GKE Gateway will stop emitting it in a future update, use "Programmed" instead.
+    Observed Generation:   1
+    Reason:                Ready
+    Status:                True
+    Type:                  Ready
+    Last Transition Time:  2024-04-08T11:11:44Z
+    Message:               
+    Observed Generation:   1
+    Reason:                Healthy
+    Status:                True
+    Type:                  networking.gke.io/GatewayHealthy
+  Listeners:
+    Attached Routes:  0
+    Conditions:
+      Last Transition Time:  2024-04-08T11:11:44Z
+      Message:               
+      Observed Generation:   1
+      Reason:                Programmed
+      Status:                True
+      Type:                  Programmed
+      Last Transition Time:  2024-04-08T11:11:44Z
+      Message:               The OSS Gateway API has altered the "Ready" condition semantics and reserved it for future use. GKE Gateway will stop emitting it in a future update, use "Programmed" instead.
+      Observed Generation:   1
+      Reason:                Ready
+      Status:                True
+      Type:                  Ready
+    Name:                    http
+    Supported kinds:
+      Group:  gateway.networking.k8s.io
+      Kind:   HTTPRoute
+Events:
+  Type    Reason  Age                  From                   Message
+  ----    ------  ----                 ----                   -------
+  Normal  ADD     3m9s                 mc-gateway-controller  store/external-http
+  Normal  SYNC    68s (x13 over 3m1s)  mc-gateway-controller  store/external-http
+  Normal  UPDATE  54s (x3 over 3m9s)   mc-gateway-controller  store/external-http
+  Normal  SYNC    54s                  mc-gateway-controller  SYNC on store/external-http was a success
+Sometimes, there are transient errors shown in the Events section. Wait until it shows the SYNC on store/external-http was a success message.
+
+Note: It can take up to ten minutes for the Gateway to fully deploy and serve traffic.
+It takes some time for the external IP to be created. To ensure that it is, run the following command until you see the external IP:
+kubectl get gateway external-http -o=jsonpath="{.status.addresses[0].value}" --context cluster1 --namespace store | xargs echo -e
+Copied!
+If it doesn't return an external IP, wait a few minutes and run it again.
+
+Once the Gateway has deployed successfully, retrieve the external IP address from the external-http Gateway:
+EXTERNAL_IP=$(kubectl get gateway external-http -o=jsonpath="{.status.addresses[0].value}" --context cluster1 --namespace store)
+echo $EXTERNAL_IP
+
+Make sure that the IP is not empty.
+
+Send traffic to the root path of the domain:
+curl http://${EXTERNAL_IP}
+
+This load balances traffic to the store ServiceImport, which is across clusters cluster2 and cluster3. The load balancer sends your traffic to the closest region to you, and you might not see responses from the other region.
+
+Your output should look similar to the following:
+
+{
+  "cluster_name": "cluster3", 
+  "host_header": "35.190.90.199", 
+  "node_name": "gke-cluster3-default-pool-d455657f-srg8.us-east4-c.c.qwiklabs-gcp-03-dafc3e3432a4.internal", 
+  "pod_name": "store-5b8c6b7df-bl8ps", 
+  "pod_name_emoji": "🚍", 
+  "project_id": "qwiklabs-gcp-03-dafc3e3432a4", 
+  "timestamp": "2024-04-08T11:20:23", 
+  "zone": "us-east4-c"
+}
+If you see the default backend - 404 or curl: (52) Empty reply from server message, the Gateway is not ready yet. Wait a couple of minutes and try again.
+
+Next, send traffic to the /west path to access the application located in the cluster2 cluster:
+curl http://${EXTERNAL_IP}/west
+
+This routes traffic to the store-west-2 ServiceImport, which only has Pods running on the cluster2 cluster. A cluster-specific ServiceImport, like store-west-2, enables an application owner to explicitly send traffic to a specific cluster rather than letting the load balancer make the decision.
+
+The output confirms that the request was served by a Pod from the cluster2 cluster:
+
+{
+  "cluster_name": "cluster2", 
+  "host_header": "35.190.90.199", 
+  "node_name": "gke-cluster2-default-pool-3f8a6304-22g0.us-west1-b.c.qwiklabs-gcp-03-dafc3e3432a4.internal", 
+  "pod_name": "store-5b8c6b7df-m5lb9", 
+  "pod_name_emoji": "👩🏾‍❤️‍💋‍👩🏻", 
+  "project_id": "qwiklabs-gcp-03-dafc3e3432a4", 
+  "timestamp": "2024-04-08T11:19:46", 
+  "zone": "us-west1-b"
+}
+Finally, send traffic to the /east path to access the application located in the cluster3 cluster:
+curl http://${EXTERNAL_IP}/east
+
+The output confirms that the request was served by a Pod from the cluster3 cluster:
+
+{
+  "cluster_name": "cluster3", 
+  "host_header": "35.190.90.199", 
+  "node_name": "gke-cluster3-default-pool-d455657f-srg8.us-east4-c.c.qwiklabs-gcp-03-dafc3e3432a4.internal", 
+  "pod_name": "store-5b8c6b7df-bl8ps", 
+  "pod_name_emoji": "🚍", 
+  "project_id": "qwiklabs-gcp-03-dafc3e3432a4", 
+  "timestamp": "2024-04-08T11:20:23", 
+  "zone": "us-east4-c"
+}
