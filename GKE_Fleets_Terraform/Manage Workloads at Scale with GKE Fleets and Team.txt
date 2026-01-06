@@ -1,0 +1,179 @@
+Manage Workloads at Scale with GKE Fleets and Teams
+
+
+Overview
+GKE offers a set of capabilities that help you manage clusters, infrastructure, and workloads as they scale in capacity. These capabilities are all built around the idea of the fleet: a logical grouping of Kubernetes clusters and other resources that can be managed by the Fleet service, also known as the Hub service.
+
+One of the primary responsibilities of platform administrators is to ensure that application and service teams have the necessary infrastructure resources to run their workloads. With GKE's fleet team management features, administrators can easily provision and manage infrastructure resources for different teams, with each team treated as a separate "tenant" on the fleet.
+
+In this code we explore fleet and fleet team management features of GKE to build an Enterprise Developer Platform.
+
+
+
+-----Task 1. Create GKE Clusters and register to fleet----
+gcloud services enable anthos.googleapis.com 
+
+gcloud container fleet create --display-name=my-gke-fleet
+
+
+##EDIT ZONE and REGION##
+
+PROJECT_ID=$(gcloud config get-value project)
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+ZONE=europe-west1-b
+REGION=europe-west1
+VM_NAME="bulk-export-vm"
+echo $ZONE
+echo $VM_NAME
+echo $PROJECT_ID
+echo $PROJECT_NUMBER
+export GOOGLE_CLOUD_PROJECT=$PROJECT_ID;
+
+gcloud container clusters create-auto --async \
+gke-cluster-01-ap --region europe-west1 \
+--release-channel rapid --labels mesh_id=proj-279171147660 \
+--enable-fleet
+
+
+gcloud container clusters create \
+gke-cluster-02-st --zone $ZONE \
+--release-channel rapid --num-nodes 2 --labels mesh_id=proj-279171147660 \
+--workload-pool=qwiklabs-gcp-02-4cd235752cc4.svc.id.goog --gateway-api=standard --enable-fleet --machine-type e2-standard-2
+
+##It can take up to 10 minutes##
+
+gcloud container clusters list
+
+-----Manage fleet-level features-----
+
+gcloud container fleet mesh enable
+
+-To begin managing the fleet-level features, configure the Policy.
+
+-In the Google Cloud console, select the Navigation Menu (Navigation menu) > Kubernetes Engine > Features > Feature Manager.
+
+-Find Policy and click Configure.
+
+-On the Feature Manager: Policy page, click Customize Fleet Setting to configure fleet-level settings.
+
+-Enable Pod Security Policies v2022.
+
+-Click Edit Policy Controller configuration, and select the latest release Policy Controller product version and then save the changes.
+
+-Click Configure to configure fleet settings.
+
+Note: If you are asked to confirm fleet settings, click Confirm.
+Note: If you get failed in configure fleet settings, try again by clicking Configure.
+Select both clusters to sync it with the default fleet-level settings and then click on Sync to fleet settings.
+Click Confirm to sync the cluster.
+Note: It can take up to 5-10 minutes for the clusters Feature status to get enabled. Refresh your page periodically until the status appears.
+Note: Here are the fleet-level default settings you can configure according to what you need:
+Service Mesh
+Config Sync
+Continuous validation for Binary Authorization
+Policy Controller
+Security posture
+Note: Within your fleet settings, you can configure Security posture, set Vulnerabilities scan to Basic, save the changes, and configure fleet settings.
+
+
+
+
+
+Task 3. Set up teams for your fleet
+Fleet team management features help administrators to easily allocate and manage infrastructure resources for their teams. Each team is treated as a distinct "tenant" within the fleet. This allows teams to run and manage their own workloads, view logs, track resource utilization, error rates, and other metrics that are relevant to their specific clusters and namespaces.
+
+For more information about the fleet team management feature, refer to the Fleet team management documentation.
+
+In this task, you set up and manage fleet usage for a team.
+
+On the Google Cloud console, select the Navigation Menu (Navigation menu icon) > Kubernetes Engine > Teams.
+
+Click Create Team Scope.
+
+Team scopes let you define subsets of fleet resources on a per-team basis, with each scope associated with one or more fleet member clusters. Team scopes can include clusters on Google Cloud or outside Google Cloud, though all the clusters must be members of the same fleet. A cluster can be associated with more than one team scope, letting different teams run workloads on the same cluster.
+
+On the Team Basics page, in the Name field, enter gcc-dev-team for your team scope.
+You won't be able to change this name once the team scope is created.
+
+To add team members to the scope, click Add Team Member.
+
+For Type, select User to add an individual team member.
+
+For User, type filled in at lab start as the email address.
+
+For Role, select Scope Admin to specify the access level of the team member.
+
+On the Team Basics page, after adding team members to your scope, click Continue.
+
+In the Clusters dropdown, select both the fleet clusters gke-cluster-01-ap and gke-cluster-02-st to associate with this team scope, and click OK.
+
+On the Clusters page, after adding clusters to your scope, click Continue.
+
+On the Namespaces page, click + Add Namespace.
+
+Fleet namespaces provide a way to control who has access to specific namespaces within your fleet. By default, any namespaces with the same name defined on clusters in the fleet are treated as if they were the same namespace. However, fleet team management provides a way to add more granular control over namespaces.
+
+You can create fleet namespaces within specific team scopes, and then grant team members access to them only on clusters within their team scope. Fleet namespaces can be used in the same way as any other Kubernetes namespace on the member clusters in the team scope. Platform admins can create fleet namespaces themselves, or, with some extra permissions, delegate namespace creation to team admins.
+
+For Name, enter gcc-dev-ns.
+
+To create the team scope, click Create Team Scope.
+
+
+-----------Task 4. Deploy an application to the team------------
+Cymbal Bank is a sample HTTP-based web app that simulates a bank's payment processing network, allowing users to create artificial bank accounts and complete transactions.
+
+In this task, you deploy this application to the gke-cluster-01-ap cluster registered in the team.
+
+Perform the steps below in the Cloud Shell environment.
+
+Retrieve the credentials for the cluster using the following command:
+gcloud container clusters get-credentials gke-cluster-01-ap \
+    --region $REGION 
+Copied!
+To simplify the name of the Kubernetes context, rename it to the name of the cluster:
+kubectl config rename-context gke_${PROJECT_ID}_${REGION}_gke-cluster-01-ap gke-cluster-01-ap
+Copied!
+Clone the application repository:
+git clone https://github.com/GoogleCloudPlatform/bank-of-anthos.git && \
+cd bank-of-anthos
+Copied!
+Deploy application to the gke-cluster-01-ap GKE cluster in gcc-dev-ns namespace:
+kubectl config use-context gke-cluster-01-ap
+kubectl apply -f ./extras/jwt/jwt-secret.yaml --namespace gcc-dev-ns
+kubectl apply -f ./kubernetes-manifests --namespace gcc-dev-ns
+Copied!
+Wait approximately 3-4 minutes and verify all the pods are running:
+kubectl get pods --namespace gcc-dev-ns
+
+
+
+----Task 5. View team-based logs and Fleet overview-------
+View team-based logs
+Fleet logs allow you to view logs at the entire fleet level, or for specific team scopes.
+
+Fleet scope logs show Container and Pod logs for applications owned by a team deployed in a specific fleet scope with multiple fleet-level namespaces.
+
+In this task, you enable fleet logs using Google Cloud CLI and view team-based logs.
+
+Enable fleet logging:
+cat > config.json << EOF
+{
+  "loggingConfig": {
+      "defaultConfig": {
+          "mode": "COPY"
+      },
+      "fleetScopeLogsConfig": {
+          "mode": "MOVE"
+      }
+  }
+}
+EOF
+
+gcloud container fleet fleetobservability update --logging-config=config.json
+Copied!
+Click the team scope gcc-dev-team, whose logs you want to view, and click the Logs tab.
+
+Select Container Logs to filter the logs view.
+
+Note: It can take up to 2-3 minutes to load the logs after fleet logging is enabled.
