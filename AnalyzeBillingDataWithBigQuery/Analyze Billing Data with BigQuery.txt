@@ -1,0 +1,311 @@
+Run the following Commands in CloudShell
+curl -LO raw.githubusercontent.com/Cloud-Wala-Banda/Labs-Solutions/main/Analyzing%20Billing%20Data%20with%20BigQuery/gsp621.sh
+
+sudo chmod +x gsp621.sh
+
+./gsp621.sh
+Go to BigQuery from here
+SELECT CONCAT(service.description, ' : ',sku.description) as Line_Item FROM `billing_dataset.enterprise_billing` GROUP BY 1
+SELECT CONCAT(service.description, ' : ',sku.description) as Line_Item, Count(*) as NUM FROM `billing_dataset.enterprise_billing` GROUP BY CONCAT(service.description, ' : ',sku.description)
+
+
+-----------------------
+Analyzing Billing Data with BigQuery
+https://www.skills.google/focuses/7114?parent=catalog
+GSP621
+
+Overview
+BigQuery is Google's serverless, highly scalable enterprise data warehouse that is designed to make data analysts more productive with unmatched price-performance.
+
+In this lab, you use BigQuery to examine sample Cloud Billing records. After you gain some familiarity with the tool and the dataset, you run SQL queries to gain insights from your billing data.
+
+What you'll learn
+In this lab, you learn how to do the following:
+
+Sign in to BigQuery from the Google Cloud console.
+Examine the sample dataset and table.
+Compose and run simple queries on the billing data.
+Run queries on the data and answer pertinent billing questions.
+Setup and requirements
+Before you click the Start Lab button
+Read these instructions. Labs are timed and you cannot pause them. The timer, which starts when you click Start Lab, shows how long Google Cloud resources are made available to you.
+
+This hands-on lab lets you do the lab activities in a real cloud environment, not in a simulation or demo environment. It does so by giving you new, temporary credentials you use to sign in and access Google Cloud for the duration of the lab.
+
+To complete this lab, you need:
+
+Access to a standard internet browser (Chrome browser recommended).
+Note: Use an Incognito (recommended) or private browser window to run this lab. This prevents conflicts between your personal account and the student account, which may cause extra charges incurred to your personal account.
+Time to complete the lab—remember, once you start, you cannot pause a lab.
+Note: Use only the student account for this lab. If you use a different Google Cloud account, you may incur charges to that account.
+How to start your lab and sign in to the Google Cloud console
+Click the Start Lab button. If you need to pay for the lab, a dialog opens for you to select your payment method. On the left is the Lab Details pane with the following:
+
+The Open Google Cloud console button
+Time remaining
+The temporary credentials that you must use for this lab
+Other information, if needed, to step through this lab
+Click Open Google Cloud console (or right-click and select Open Link in Incognito Window if you are running the Chrome browser).
+
+The lab spins up resources, and then opens another tab that shows the Sign in page.
+
+Tip: Arrange the tabs in separate windows, side-by-side.
+
+Note: If you see the Choose an account dialog, click Use Another Account.
+If necessary, copy the Username below and paste it into the Sign in dialog.
+
+"Username"
+Copied!
+You can also find the Username in the Lab Details pane.
+
+Click Next.
+
+Copy the Password below and paste it into the Welcome dialog.
+
+"Password"
+Copied!
+You can also find the Password in the Lab Details pane.
+
+Click Next.
+
+Important: You must use the credentials the lab provides you. Do not use your Google Cloud account credentials.
+Note: Using your own Google Cloud account for this lab may incur extra charges.
+Click through the subsequent pages:
+
+Accept the terms and conditions.
+Do not add recovery options or two-factor authentication (because this is a temporary account).
+Do not sign up for free trials.
+After a few moments, the Google Cloud console opens in this tab.
+
+Note: To access Google Cloud products and services, click the Navigation menu or type the service or product name in the Search field. Navigation menu icon and Search field
+Task 1. Locate your dataset and table in BigQuery
+In this task you locate your billing dataset in the Cloud console. You use BigQuery to look at billing data associated with your project.
+
+In the Google Cloud console, in the Navigation menu (Menu icon), click BigQuery.
+
+In the Welcome dialog, click Done.
+
+In the Explorer pane, for your project ID, click Expand node (expander arrow).
+
+The billing_dataset is displayed.
+
+Expand the billing_dataset.
+
+The enterprise_billing dataset is displayed.
+
+Task 2. Examine the billing data
+In this task you examine the billing data in BigQuery.
+
+In the Google Cloud console, in the Explorer pane, click the enterprise_billing table.
+
+This displays three tabs that provide information on the enterprise_billing table. The Schema tab is open by default. The other tabs are Details and Preview.
+
+Schema tabbed page
+
+BigQuery automatically created this schema based on the sample Cloud Billing records. Notice that there are strings, integers, timestamps, and floating values.
+
+Click the Details tab.
+
+A table with 415,602 rows is displayed.
+
+Click the Preview tab.
+
+Look at the header row of the table to see what information the data provides, and then answer the following questions:
+
+
+Which of the following lists some of the information provided by this table?
+The account charges are billed to; the service provided; usage cost; and the invoice on which this charge appears
+The company/person charges are billed to; the billing address; the service provided; and the usage cost
+The project using the provided service; the service provided; the region in which the service is used; and where a backup copy of any data consumed is stored
+The account charges are billed to; the contact person for the account; the project that uses the provided service, when the project starts and stops using the provided service; the invoice on which a charge appears
+
+Find the Results per page field. You can set the number of rows displayed per page from 10 to 200.
+
+The first 200 entries show that the Cloud Pub/Sub service was provided to the same billing account and within the same country.
+True
+False
+
+Task 3. Analyze data using SQL queries
+In this task you run SQL queries in BigQuery to analyze your data to obtain information such as, which services were used and what were their associated costs?; which projects incurred the most cost?; and are the costs as expected?
+
+In BigQuery, you use SQL queries to pull and process data from a table to answer your questions. To reference a table in a query, you specify the dataset and table; the project is optional.
+
+Note: If you do not specify the project, BigQuery defaults to the current project.
+In the Google Cloud console, in the Explorer pane, click the enterprise_billing table.
+
+Click + SQL query.
+
+In the Query editor, clear the current query in preparation for the next step.
+
+You enter and run your SQL queries in the Query editor.
+
+Query 1: Analyze your data based on costs
+In this step you perform some analysis based on costs. You construct a simple query based on the Cost field.
+
+In the Query editor, type the following, and then click Run:
+SELECT * FROM `billing_dataset.enterprise_billing` WHERE Cost > 0
+Copied!
+This script queries data in the enterprise_billing table for records with a Cost of greater than zero.
+
+Expected output:
+
+Query results table
+
+Although this shows you how to run a query in BigQuery, the resulting table is not clear or helpful. For a more useful query, run the following script to see how much was spent for services.
+
+In the Query editor, clear the current query.
+
+In the Query editor, type the following, and then click Run:
+
+SELECT
+ project.name as Project_Name,
+ service.description as Service,
+ location.country as Country,
+ cost as Cost
+FROM `billing_dataset.enterprise_billing`;
+Copied!
+Notice that you've reduced the number of columns by selecting what information (project.name, service.description, location.country, and cost) you want to see.
+
+Expected output:
+
+Query results table
+
+Complete the next steps to check your progress to verify an objective and then answer a question using the SQL query output.
+
+In the Explorer pane, click enterprise_billing, and then click Schema.
+Answer this question:
+
+
+To see when the service was used, what field would you add to the query? (You can test in BigQuery)
+service.id
+system_labels.value
+what_is_it.time
+usage_start_time
+
+Click Check my progress to verify that you completed the objective.
+
+Construct a simple query based on the Cost field.
+Query 2: Examine key information
+In the previous step, you queried for specific information, also known as key information, to reduce the amount of data in the table. You used parameters to identify key information. In this section, you'll list key information.
+
+For this example, the number of unique services that are available is the key information you want. Run a query that combines the service description and the SKU description and then lists that as line items.
+
+Click + SQL query.
+
+In the Query editor, clear the current query in preparation for the next step.
+
+In the Query editor, type the following, and then click Run:
+
+SELECT CONCAT(service.description, ' : ',sku.description) as Line_Item FROM `billing_dataset.enterprise_billing` GROUP BY 1
+Copied!
+Note that GROUP BY 1 means to group the list by the first column.
+
+Expected output:
+
+Schema results table
+
+Answer the following questions:
+
+
+What did you just do?
+Determined the number of unique services available and listed the service name and description
+Determined and listed the number of services by region
+Determined and listed the services used in the US for the last 60 days
+Determined and listed how many unique services were used in this billing cycle
+
+
+How many different line items does the sample Cloud Billing data cover?
+160 services
+12 services
+68 services
+5 services
+
+Click Check my progress to verify that you completed the objective.
+
+List unique services available from the sample bill.
+Query 3: Analyze service usage
+In this step you look at service usage to find out the number of times a resource used a service/SKU.
+
+In the Query editor, clear the current query in preparation for the next step.
+
+In the Query editor, type the following, and then click Run:
+
+SELECT CONCAT(service.description, ' : ',sku.description) as Line_Item, Count(*) as NUM FROM `billing_dataset.enterprise_billing` GROUP BY CONCAT(service.description, ' : ',sku.description)
+Copied!
+Expected output:
+
+Schema results table
+
+Answer the following questions:
+
+
+How many services were used six times in the billing record?
+7
+4
+3
+0
+
+
+What services produced 3349 logs in your billing record?
+BigQuery : Active Storage
+Cloud Functions : Network Egress from us-central1
+Cloud Pub/Sub : Inter-region data delivery from North America to North America
+Compute Engine : Network Internet Standard Tier Egress from Belgium
+
+Click Check my progress to verify that you completed the objective.
+
+Get the count of logs generated for each service from the sample bill.
+Query 4: Determine which project has the most records
+In this query you find the Google Cloud project with the most records.
+
+In the Query editor, clear the current query in preparation for the next step.
+
+In the Query editor, type the following, and then click Run:
+
+SELECT project.id, count(*) as count from `billing_dataset.enterprise_billing` GROUP BY project.id
+Copied!
+This query counts how many times a project.id appears in a record and groups the results by project.id.
+
+Expected output:
+
+Query results table
+
+Answer the following question:
+
+
+Which Google Cloud Project has the most billing records?
+ctg-storage
+ctg-dev-241406
+ctg-prod-241521
+ctg-sandbox-242206
+
+Click Check my progress to verify that you completed the objective.
+
+Find the Google Cloud project with the most records in the billing data.
+Query 5. Find the cost per project
+In this step you find the cost breakdown for each project:
+
+In the Query editor, clear the current query in preparation for the next step.
+
+In the Query editor, type the following, and then click Run:
+
+SELECT ROUND(SUM(cost),2) as Cost, project.name from `billing_dataset.enterprise_billing` GROUP BY project.name
+Copied!
+This query adds the cost per project.name and then returns the results grouped by project.name.
+
+Expected output:
+
+Schema result table
+
+Answer the following question:
+
+
+Which project generates the largest cost?
+CTG - Storage
+CTG - Prod
+CTG - Dev
+CTG - Sandbox
+
+Click Check my progress to verify that you completed the objective.
+
+Find the cost breakdown per project.
